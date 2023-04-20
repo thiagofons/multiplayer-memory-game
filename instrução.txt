@@ -1,0 +1,1 @@
+Para executar, rodar o arquivo Servidor-Teste.py em um terminal e o Cliente-Teste.py em outro.
