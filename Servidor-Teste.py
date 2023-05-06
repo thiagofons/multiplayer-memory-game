@@ -1,47 +1,72 @@
 import socket
-import sys
-import select
+import selectors
+import types
+
+# selector
+sel = selectors.DefaultSelector()
 
 HOST = "127.0.0.1"  # Standard loopback interface address (localhost)
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
 
-dim = int(sys.argv[1])
-njog = int(sys.argv[2])
+lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+lsock.bind((HOST, PORT))
+lsock.listen()
+
+print(f"Listening on {HOST, PORT}")
+
+# configure the socket in non-blocking mode
+lsock.setblocking(False)
+
+# registers the socket to be monitored by
+sel.register(lsock, selectors.EVENT_READ, data=None)
 
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind((HOST, PORT))
-    server.listen(njog)
-    sockets_list = [server]
 
+def accept_wrapper(sock):
+    connection, address = sock.accept()
+    print(f"Accepted connection from {address}")
+
+    connection.setblocking(False)
+
+    data = types.SimpleNamespace(addr=address, inb=b"", outb=b"")
+    events = selectors.EVENT_READ | selectors.EVENT_WRITE
+
+    sel.register(connection, events, data=data)
+
+def service_connection(key, mask):
+    sock = key.fileobj
+    data = key.data
+
+    if mask & selectors.EVENT_READ:
+        received_data = sock.recv(1024)
+
+        if received_data:
+            data.outb += received_data
+        else:
+            print(f"Closing connection to {data.addr}")
+            sel.unregister(sock)
+            sock.close()
+
+    if mask & selectors.EVENT_WRITE:
+        if data.outb:
+            print(f"Echoing {data.outb!r} to {data.addr}")
+            sent = sock.send(data.outb)
+            data.outb = data.outb[sent:]
+
+# event loop
+try:
     while True:
-        read_sockets, _, _ = select.select(sockets_list, [], [])
-
-        for sock in read_sockets:
-        # se o socket for o servidor, aceita uma nova conexão
-            if sock == server:
-                client_socket, client_address = server.accept()
-                sockets_list.append(client_socket)
-                print(f'Nova conexão de {client_address}')
-            # se o socket for um cliente, recebe dados
+        events = sel.select(timeout=None)
+        for key, mask in events:
+            if key.data is None:
+                accept_wrapper(key.fileobj)
             else:
-                while True:
-                    data = sock.recv(1024)
-                    print(data)
-                    if not data:
-                        sock.close()
-                        sockets_list.remove(sock)
-                        break
-                    
-                    print(f'Recebido de {sock.getpeername()}: {data.decode()}')
-   
-#    sockets_list.append(conn)
-    
-#     with conn:
-#         print(f"Connected by {addr}")
-#         while True:
-#             data = conn.recv(1024)
-#             if not data:
-#                 break
-#             conn.sendall(data)
+                service_connection(key, mask)
+except KeyboardInterrupt:
+    print("Caught keyboard interrupt, exiting...")
+finally:
+    sel.close()
+
+
+
