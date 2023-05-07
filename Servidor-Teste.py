@@ -1,6 +1,7 @@
 import socket
 import selectors
 import types
+import time
 
 # selector
 sel = selectors.DefaultSelector()
@@ -12,21 +13,24 @@ lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 lsock.bind((HOST, PORT))
 lsock.listen()
-
 print(f"Listening on {HOST, PORT}")
 
-# configure the socket in non-blocking mode
 lsock.setblocking(False)
-
-# registers the socket to be monitored by
 sel.register(lsock, selectors.EVENT_READ, data=None)
 
+players = []
 
+rodada = 0
 
 def accept_wrapper(sock):
     connection, address = sock.accept()
-    print(f"Accepted connection from {address}")
+    players.append({
+        "name": f"P{len(players) + 1}",
+        "ip": address[0],
+        "port": address[1]
+    })
 
+    print(f"\n\nConnected with {address[1]}\n\n")
     connection.setblocking(False)
 
     data = types.SimpleNamespace(addr=address, inb=b"", outb=b"")
@@ -50,7 +54,6 @@ def service_connection(key, mask):
 
     if mask & selectors.EVENT_WRITE:
         if data.outb:
-            print(f"Echoing {data.outb!r} to {data.addr}")
             sent = sock.send(data.outb)
             data.outb = data.outb[sent:]
 
@@ -58,11 +61,15 @@ def service_connection(key, mask):
 try:
     while True:
         events = sel.select(timeout=None)
+
         for key, mask in events:
             if key.data is None:
                 accept_wrapper(key.fileobj)
             else:
+                print(f"KEY DATA: {key.fileobj}\nMASK: {mask}")
+                time.sleep(0.5)
                 service_connection(key, mask)
+
 except KeyboardInterrupt:
     print("Caught keyboard interrupt, exiting...")
 finally:
