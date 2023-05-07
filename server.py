@@ -1,6 +1,8 @@
 import socket
 import random
 import json
+import sys
+import time
 
 HOST = "127.0.0.1"
 PORT = 65432
@@ -146,22 +148,48 @@ while True:
         print("extra")
         cliente.send(jogo_json.encode())
 
+        while True:
+            confirmacao = cliente.recv(1024).decode()
+            if confirmacao == "OK":
+                break
+
         i1, j1, i2, j2 = coord_pecas
         cliente.send(str.encode("Pecas escolhidas --> ({0}, {1}) e ({2}, {3})\n".format(i1, j1, i2, j2)))
 
         # Pecas escolhidas sao iguais?
-        # if jogo['tabuleiro'][i1][j1] == jogo['tabuleiro'][i2][j2]:
-        #
-        #     cliente.send(str.encode("Pecas casam! Ponto para o jogador {0}.".format(vez + 1)))
-        #
-        #     incrementa_placar(jogo['placar'], jogo['vez'])
-        #     paresEncontrados = paresEncontrados + 1
-        #     remove_peca(jogo['tabuleiro'], i1, j1)
-        #     remove_peca(jogo['tabuleiro'], i2, j2)
-        # else:
-        #
-        #     cliente.send(str.encode("Pecas nao casam!"))
-        #
-        #     fecha_peca(jogo['tabuleiro'], i1, j1)
-        #     fecha_peca(jogo['tabuleiro'], i2, j2)
-        #     vez = (vez + 1) % nJogadores
+        if jogo['tabuleiro'][i1][j1] == jogo['tabuleiro'][i2][j2]:
+
+            cliente.send(str.encode("Pecas casam! Ponto para o jogador {0}.".format(vez + 1)))
+
+            incrementa_placar(jogo['placar'], jogo['vez'])
+            paresEncontrados = paresEncontrados + 1
+            remove_peca(jogo['tabuleiro'], i1, j1)
+            remove_peca(jogo['tabuleiro'], i2, j2)
+        else:
+
+            cliente.send(str.encode("Pecas nao casam!"))
+
+            fecha_peca(jogo['tabuleiro'], i1, j1)
+            fecha_peca(jogo['tabuleiro'], i2, j2)
+            vez = (vez + 1) % nJogadores
+
+    # Verificar o vencedor e imprimir
+    pontuacao_maxima = max(placar)
+    vencedores = []
+    for i in range(0, nJogadores):
+
+        if placar[i] == pontuacao_maxima:
+            vencedores.append(i)
+
+    if len(vencedores) > 1:
+
+        print("Houve empate entre os jogadores ", end="")
+        for i in vencedores:
+            sys.stdout.write(str(i + 1) + ' ')
+
+        sys.stdout.write("\n")
+        break
+
+    else:
+        print("Jogador {0} foi o vencedor!".format(vencedores[0] + 1))
+        break

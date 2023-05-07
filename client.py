@@ -2,6 +2,7 @@ import socket
 import sys
 import os
 import json
+import time
 
 HOST = "localhost"
 PORT = 65432
@@ -113,11 +114,11 @@ mensagens = [
     "Escolha uma peca ainda fechada!"
 ]
 
+
 while True:
 
     # Escolha das pecas
     while True:
-
         jogo_json = cliente.recv(1024).decode()
         jogo = json.loads(jogo_json)
         imprime_status(jogo['tabuleiro'], jogo['placar'], jogo['vez'])
@@ -135,8 +136,12 @@ while True:
         coordenadas_json = json.dumps(coordenadas)
         cliente.send(coordenadas_json.encode())
 
+    cliente.send("OK".encode())
+
     pecas_escolhidas = cliente.recv(1024).decode()
     print(pecas_escolhidas)
 
-    # resultado_pecas = cliente.recv(1024).decode()
-    # print(resultado_pecas)
+    resultado_pecas = cliente.recv(1024).decode()
+    print(resultado_pecas)
+
+    time.sleep(4)
