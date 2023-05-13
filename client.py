@@ -7,7 +7,6 @@ import time
 HOST = "localhost"
 PORT = 65432
 
-
 def limpa_tela():
     os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -108,6 +107,7 @@ dim = 4
 
 cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 cliente.connect((HOST, PORT))
+print('Player conected!')
 
 mensagens = [
     "Especifique uma peca:",
@@ -120,15 +120,14 @@ while True:
     # Escolha das pecas
     while True:
         jogo_json = cliente.recv(1024).decode()
-        jogo = json.loads(jogo_json)
+        jogo, id = json.loads(jogo_json)
         imprime_status(jogo['tabuleiro'], jogo['placar'], jogo['vez'])
 
         if jogo['msg'] == -1:
             break
-        print(mensagens[jogo['msg']])
+        #print(mensagens[jogo['msg']])
 
         while True:
-
             coordenadas = le_coordenada(dim)
             if coordenadas:
                 break

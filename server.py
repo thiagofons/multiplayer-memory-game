@@ -2,6 +2,7 @@ import socket
 import random
 import json
 import sys
+import _thread
 import time
 
 HOST = "127.0.0.1"
@@ -85,6 +86,14 @@ def incrementa_placar(placar, jogador):
     placar[jogador] = placar[jogador] + 1
 
 
+def create_thread(message, servidor, clientes, nJogadores):
+    servidor.listen()
+    cliente, endereco = servidor.accept()
+    clientes.append(cliente)
+
+    if len(clientes) < nJogadores:
+        _thread.start_new_thread(create_thread, (message, servidor, clientes, nJogadores))
+
 # Tamanho (da lateral) do tabuleiro. NECESSARIAMENTE PAR E MENOR QUE 10!
 dim = 4
 
@@ -98,28 +107,40 @@ totalDePares = dim ** 2 / 2
 # casar.
 paresEncontrados = 0
 
+# Array com todos os clientes conectados
+clientes = []
+
+message = []
+
 servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 servidor.bind((HOST, PORT))
+_thread.start_new_thread(create_thread, (message, servidor, clientes, nJogadores))
 
-servidor.listen()
-cliente, endereco = servidor.accept()
+while(len(clientes) < nJogadores):
+    pass
 
-while True:
-
+def inicia_jogo(clientes, nJogadores, dim):
     # Cria um tabuleiro para a partida
     tabuleiro = novo_tabuleiro(dim)
 
     # Cria um placar zerado
     placar = novo_placar(nJogadores)
 
-    vez = 0
-
     jogo = {
         'tabuleiro': tabuleiro,
         'placar': placar,
-        'vez': vez,
+        'vez': 0,
         'msg': 0
     }
+
+    paresEncontrados = 0
+    totalDePares = dim ** 2 / 2
+
+    id = 0
+    for cliente in clientes:
+        jogo_json = json.dumps((jogo, id))
+        cliente.send(jogo_json.encode())
+        id += 1
 
     while paresEncontrados < totalDePares:
         coord_pecas = []
@@ -127,39 +148,67 @@ while True:
 
         # Escolha de pecas
         while len(coord_pecas) < 4:
+            print(clientes[jogo['vez']])
 
-            jogo_json = json.dumps(jogo)
-            print("sending")
-            cliente.send(jogo_json.encode())
+           
+            print("sending...")
 
-            coordenadas_json = cliente.recv(1024).decode()
-            coordenadas = json.loads(coordenadas_json)
-            peca_fechada = abre_peca(tabuleiro, coordenadas[0], coordenadas[1])
+            # Pega e repassa primeia coordenada
+            coordenadas_json1 = clientes[jogo['vez']].recv(1024).decode()
+            coordenadas1 = json.loads(coordenadas_json1)
+
+            count_vez1 = 0
+            for cliente in clientes:
+                if count_vez1 != jogo['vez']:
+                    cliente.send(coordenadas_json1)
+                count_vez1 += 1
+            peca_fechada = abre_peca(tabuleiro, coordenadas1[0], coordenadas1[1])
 
             if not peca_fechada:
                 jogo['msg'] = 1
                 continue
             else:
-                coord_pecas.extend(coordenadas)
+                coord_pecas.extend(coordenadas1)
+                jogo['msg'] = 0 if len(coord_pecas) < 4 else -1
+            time.sleep(1)
+
+            # Pega e repassa segunda coordenada
+            coordenadas_json2 = cliente[jogo['vez']].recv(1024).decode()
+            coordenadas2 = json.loads(coordenadas_json2)
+
+            count_vez2 = 0
+            for cliente in clientes:
+                if count_vez2 != jogo['vez']:
+                    cliente.send(coordenadas_json2)
+                count_vez2 += 1
+
+            peca_fechada = abre_peca(tabuleiro, coordenadas2[0], coordenadas2[1])
+            time.sleep(1)
+
+            if not peca_fechada:
+                jogo['msg'] = 1
+                continue
+            else:
+                coord_pecas.extend(coordenadas2)
                 jogo['msg'] = 0 if len(coord_pecas) < 4 else -1
 
-        jogo['vez'] = -jogo['vez']
+        jogo['vez'] = (jogo['vez'] + 1) % nJogadores
         jogo_json = json.dumps(jogo)
         print("extra")
-        cliente.send(jogo_json.encode())
+        clientes[jogo['vez']].send(jogo_json.encode())
 
         while True:
-            confirmacao = cliente.recv(1024).decode()
+            confirmacao = clientes[jogo['vez']].recv(1024).decode()
             if confirmacao == "OK":
                 break
 
         i1, j1, i2, j2 = coord_pecas
-        cliente.send(str.encode("Pecas escolhidas --> ({0}, {1}) e ({2}, {3})\n".format(i1, j1, i2, j2)))
+        clientes[jogo['vez']].send(str.encode("Pecas escolhidas --> ({0}, {1}) e ({2}, {3})\n".format(i1, j1, i2, j2)))
 
         # Pecas escolhidas sao iguais?
         if jogo['tabuleiro'][i1][j1] == jogo['tabuleiro'][i2][j2]:
 
-            cliente.send(str.encode("Pecas casam! Ponto para o jogador {0}.".format(vez + 1)))
+            clientes[jogo['vez']].send(str.encode("Pecas casam! Ponto para o jogador {0}.".format(vez + 1)))
 
             incrementa_placar(jogo['placar'], jogo['vez'])
             paresEncontrados = paresEncontrados + 1
@@ -167,12 +216,11 @@ while True:
             remove_peca(jogo['tabuleiro'], i2, j2)
         else:
 
-            cliente.send(str.encode("Pecas nao casam!"))
+            clientes[jogo['vez']].send(str.encode("Pecas nao casam!"))
 
             fecha_peca(jogo['tabuleiro'], i1, j1)
             fecha_peca(jogo['tabuleiro'], i2, j2)
-            vez = (vez + 1) % nJogadores
-
+            jogo['vez'] = (jogo['vez'] + 1) % nJogadores
     # Verificar o vencedor e imprimir
     pontuacao_maxima = max(placar)
     vencedores = []
@@ -188,8 +236,8 @@ while True:
             sys.stdout.write(str(i + 1) + ' ')
 
         sys.stdout.write("\n")
-        break
 
     else:
         print("Jogador {0} foi o vencedor!".format(vencedores[0] + 1))
-        break
+
+inicia_jogo(clientes, nJogadores, dim)
